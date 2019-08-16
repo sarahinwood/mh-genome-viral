@@ -62,6 +62,7 @@ bbduk_ref = '/phix174_ill.ref.fa.gz'
 
 bbduk_container = 'shub://TomHarrop/singularity-containers:bbmap_38.00'
 star_container = 'shub://TomHarrop/singularity-containers:star_2.7.0c'
+tidyverse_container = 'shub://TomHarrop/singularity-containers:r_3.5.0'
 
 #########
 # SETUP #
@@ -79,16 +80,142 @@ rule target:
     input:
     	##do rnaseq reads map onto viral scaffolds & if so do they map over introns?
         expand('output/star/star_pass2/{sample}.Aligned.sortedByCoord.out.bam.bai', sample=all_samples),
-        'output/reapr_pipeline/05.summary.report.txt'
+        'output/reapr/pipeline/05.summary.report.txt',
+        'output/samtools/mean_depth_table.csv',
+        'output/bb_stats/gc.txt'
+
+rule bb_stats:
+    input:
+        genome = 'data/Mh_assembly.fa'
+    output:
+        gc = 'output/bb_stats/gc.txt',
+        stats = 'output/bb_stats/bb_stats.out',
+        gc_hist = 'output/bb_stats/gc_hist.out'
+    log:
+    singularity:
+        bbduk_container
+    shell:
+        'stats.sh '
+        'in={input.genome} '
+        'out={output.stats} '
+        'gc={output.gc} '
+        'gcformat=4 '
+        'gchist={output.gc_hist} '
+
+##end reapr smalt bam depth
+
+rule samtools_depth_smalt:
+    input:
+        smalt_bam = 'output/reapr/smalt/smalt.bam'
+    output:
+        depth_out = 'output/samtools/smalt_depth.out'
+    log:
+        'output/logs/samtools_depth_smalt.log'
+    threads:
+        20
+    shell:
+        'samtools depth '
+        '{input.smalt_bam} '
+        '-o {output.depth_out} '
+        '-H '
+        '2> {log}'
+
+###try for reapr smalt bam output too
+
+rule calc_mean_depth:
+    input:  
+        depth = 'output/samtools/depth.out'
+    output:
+        mean_depth_table = 'output/samtools/mean_depth_table.csv'
+    singularity:
+        tidyverse_container
+    threads:
+        20
+    log:
+        'output/logs/calc_mean_depth.log'
+    script:
+        'src/calc_mean_depth.R'
+
+
+rule samtools_depth:
+    input:
+        sorted_bam = 'output/samtools/sorted.bam'
+    output:
+        depth_out = 'output/samtools/depth.out'
+    log:
+        'output/logs/samtools_depth.log'
+    threads:
+        20
+    shell:
+        'samtools depth '
+        '{input.sorted_bam} '
+        '-o {output.depth_out} '
+        '-H '
+        '2> {log}'
+
+rule samtools_sort:
+    input:
+        sam = 'output/bwa/bwa_mem.sam'
+    output:
+        sorted_bam = 'output/samtools/sorted.bam'
+    log:
+        'output/logs/samtools_sort.log'
+    threads:
+        20
+    shell:
+        'samtools sort '
+        '{input.sam} '
+        '-o {output.sorted_bam} '
+        '2> {log}'
+
+rule bwa_mem:
+    input:
+        index = 'output/bwa/index/index.bwt',
+        trimr1 = 'output/bbduk_trim_dna/mhyp_trimr1.fq.gz',
+        trimr2 = 'output/bbduk_trim_dna/mhyp_trimr2.fq.gz'
+    output:
+        sam = 'output/bwa/bwa_mem.sam'
+    params:
+        index_dir = 'output/bwa/index/index'
+    threads:
+        50
+    log:
+        'output/logs/bwa_mem.log'
+    shell:
+        'bwa mem '
+        '-t {threads} '
+        '{params.index_dir} '
+        '{input.trimr1} '
+        '{input.trimr2} '
+        '> {output.sam} '
+        '2> {log}'
+
+##bwa-mem for coverage of scaffolds - compare to reapr smalt?
+rule bwa_index:
+    input:
+        genome = 'data/Mh_assembly.fa'
+    output:
+        index = 'output/bwa/index/index.bwt'
+    params:
+        outdir = 'output/bwa/index/index'
+    threads:
+        20
+    log:
+        'output/logs/bwa_index.log'
+    shell:
+        'bwa index '
+        '{input.genome} '
+        '-p {params.outdir} '
+        '2> {log} '
 
 ##run reapr - does this give the same output as that in the LbFV genome paper?
 rule reapr_pipeline:
     input:
         mh_genome = 'data/Mh_assembly.fa',
         bam = 'output/reapr/smalt/smalt.bam',
-        perfectmap = 'output/reapr/perfectmap/out.perfect_cov.gz'
+        perfectmap = 'output/reapr/perfectmap/perfect.perfect_cov.gz'
     output:
-        summary = 'output/reapr_pipeline/05.summary.report.txt'
+        summary = 'output/reapr/pipeline/05.summary.report.txt'
     params:
         perfectmap_prefix = 'output/reapr/perfectmap/perfect',
         outdir = 'output/reapr/pipeline'
@@ -153,13 +280,13 @@ rule unzip_bbduk:
         trimr1 = 'output/bbduk_trim_dna/mhyp_trimr1.fq.gz',
         trimr2 = 'output/bbduk_trim_dna/mhyp_trimr2.fq.gz'
     output:
-        unzipr1 = temp('output/bbduk_trim_dna/mhyp_trimr1.fq'),
-        unzipr2 = temp('output/bbduk_trim_dna/mhyp_trimr2.fq')
+        unzipr1 = temp('output/bbduk_trim_dna/uz_mhyp_trimr1.fq'),
+        unzipr2 = temp('output/bbduk_trim_dna/uz_mhyp_trimr2.fq')
     threads:
         10
     shell:
-        'gunzip {input.trimr1} & '
-        'gunzip {input.trimr2} & '
+        'gunzip {input.trimr1} > {output.unzipr1} & '
+        'gunzip {input.trimr2} > {output.unzipr2} & '
         'wait '
 
 ##trim and decontaminate DNA reads to map onto genome
@@ -221,6 +348,8 @@ rule bbduk_filter_dna:
         'stats={output.f_stats} '       
         '2> {log.filter} '         
 
+##########working with RNAseq reads from here down##########
+
 ##index so can view in igv
 rule index_star_bam:
 	input:
@@ -236,11 +365,11 @@ rule index_star_bam:
 		'index '
 		'{input.bam} '
 
-###do RNA reads map onto viral scaffolds & if so do they map across predicted introns?
+###map RNAseq onto genome & see whether viral genes are expressed, in what tissues & whether reads map over introns?
 rule star_second_pass:
     input:
-        left = 'output/bbduk_trim/{sample}_r1.fq.gz',
-        right = 'output/bbduk_trim/{sample}_r2.fq.gz',
+        left = 'output/bbduk_trim_rna/{sample}_r1.fq.gz',
+        right = 'output/bbduk_trim_rna/{sample}_r2.fq.gz',
         junctions = expand('output/star/star_pass1/{sample}.SJ.out.tab', sample=all_samples)
     output:
         bam = 'output/star/star_pass2/{sample}.Aligned.sortedByCoord.out.bam'
@@ -267,8 +396,8 @@ rule star_second_pass:
 
 rule star_first_pass:
     input:
-        left = 'output/bbduk_trim/{sample}_r1.fq.gz',
-        right = 'output/bbduk_trim/{sample}_r2.fq.gz',
+        left = 'output/bbduk_trim_rna/{sample}_r1.fq.gz',
+        right = 'output/bbduk_trim_rna/{sample}_r2.fq.gz',
         star_reference = 'output/star/star_reference/Genome'
     output:
         sjdb = 'output/star/star_pass1/{sample}.SJ.out.tab'
@@ -338,6 +467,7 @@ rule bbduk_trim_rna:
         'ktrim=r k=23 mink=11 hdist=1 tpe tbo qtrim=r trimq=15 '
         '&> {log}'
 
+##won't work on ovary samples - have had to do this manually myself for now
 rule cat_reads:
     input:
         unpack(sample_name_to_fastq)
