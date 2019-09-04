@@ -63,6 +63,7 @@ bbduk_ref = '/phix174_ill.ref.fa.gz'
 bbduk_container = 'shub://TomHarrop/singularity-containers:bbmap_38.00'
 star_container = 'shub://TomHarrop/singularity-containers:star_2.7.0c'
 tidyverse_container = 'shub://TomHarrop/singularity-containers:r_3.5.0'
+busco_container = 'shub://TomHarrop/singularity-containers:busco_3.0.2'
 
 #########
 # SETUP #
@@ -81,8 +82,39 @@ rule target:
     	##do rnaseq reads map onto viral scaffolds & if so do they map over introns?
         expand('output/star/star_pass2/{sample}.Aligned.sortedByCoord.out.bam.bai', sample=all_samples),
         'output/reapr/pipeline/05.summary.report.txt',
-        'output/samtools/mean_depth_table.csv',
-        'output/bb_stats/gc.txt'
+        'output/samtools/smalt_mean_depth_table.csv',
+        'output/bb_stats/gc.txt',
+        'output/busco/run_mh_genome/full_table_mh_genome.tsv'
+
+
+##run busco to be able to colour scaffolds on gc vs depth that contain busco genes
+rule busco:
+    input:
+        genome = 'data/Mh_assembly.fa',
+        lineage = 'data/hymenoptera_odb9'
+    output:
+        'output/busco/run_mh_genome/full_table_mh_genome.tsv'
+    log:
+        str(pathlib2.Path(resolve_path('output/logs/'),
+                            'busco_mh_genome.log'))
+    params:
+        wd = 'output/busco',
+        out = 'mh_genome',
+        lineage = lambda wildcards, input: resolve_path(input.lineage),
+        genome = lambda wildcards, input: resolve_path(input.genome)
+    singularity:
+        busco_container
+    shell:
+        'cd {params.wd} || exit 1 ; '
+        'run_BUSCO.py '
+        '--force '
+        '--in {params.genome} '
+        '--out {params.out} '
+        '--lineage {params.lineage} '
+        '--species nasonia '
+        '--mode genome '
+        '-f '
+        '&> {log} '
 
 rule bb_stats:
     input:
@@ -124,9 +156,9 @@ rule samtools_depth_smalt:
 
 rule calc_mean_depth:
     input:  
-        depth = 'output/samtools/depth.out'
+        depth = 'output/samtools/smalt_depth.out'
     output:
-        mean_depth_table = 'output/samtools/mean_depth_table.csv'
+        mean_depth_table = 'output/samtools/smalt_mean_depth_table.csv'
     singularity:
         tidyverse_container
     threads:

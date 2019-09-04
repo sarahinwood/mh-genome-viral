@@ -28,7 +28,7 @@ depth_table <- fread(depth)
 scaffold_ids <- unique(depth_table$`#CHROM`)
 
 MEAN_SCAFFOLD_DEPTH <- function(x, depth){
-  scaffold_depth<-depth[depth$`#CHROM`==x, mean(`output/samtools/sorted.bam`)]
+  scaffold_depth<-depth[depth$`#CHROM`==x, mean(`output/reapr/smalt/smalt.bam`)]
   return(data.table(scaffold_id=x, mean_depth=scaffold_depth))
 }
 
