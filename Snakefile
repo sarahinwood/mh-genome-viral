@@ -81,11 +81,52 @@ rule target:
     input:
     	##do rnaseq reads map onto viral scaffolds & if so do they map over introns?
         expand('output/star/star_pass2/{sample}.Aligned.sortedByCoord.out.bam.bai', sample=all_samples),
-        'output/reapr/pipeline/05.summary.report.txt',
-        'output/samtools/smalt_mean_depth_table.csv',
         'output/bb_stats/gc.txt',
-        'output/busco/run_mh_genome/full_table_mh_genome.tsv'
+        'output/samtools/depth.out',
+        'output/busco/run_mh_genome/full_table_mh_genome.tsv',
+        'output/prodigal_blastp/nr_blastp.outfmt6'
 
+rule blastp_nr_prodigal:
+    input:
+        query = 'output/prodigal/protein_translations.faa'
+    output:
+        blastp_res = 'output/prodigal_blastp/nr_blastp.outfmt6'
+    params:
+        blast_db = 'bin/db/blastdb/nr/nr'
+    threads:
+        20
+    log:
+        'output/logs/blastp_nr_prodigal.log'
+    shell:
+        'blastp '
+        '-query {input.query} '
+        '-db {params.blast_db} '
+        '-num_threads {threads} '
+        '-evalue 1e-05 '
+        '-outfmt "6 std salltitles" > {output.blastp_res} '
+        '2> {log}'
+
+##re-predict viral genes using bacterial translation code
+rule prodigal:
+    input:
+        viral_scaffolds = 'data/viral_scaffolds.fasta'
+    output:
+        protein_translations = 'output/prodigal/protein_translations.faa',
+        nucleotide_seq = 'output/prodigal/nucleotide_seq.fasta',
+        gene_predictions = 'output/prodigal/gene_predictions.gff'
+    log:
+        'output/logs/prodigal.log'
+    threads:
+        1
+    shell:
+        'bin/prodigal/prodigal '
+        '-i {input.viral_scaffolds} '
+        '-a {output.protein_translations} '
+        '-d {output.nucleotide_seq} '
+        '-f gff '
+        '-p meta '
+        '-o {output.gene_predictions} '
+        '2> {log} '
 
 ##run busco to be able to colour scaffolds on gc vs depth that contain busco genes
 rule busco:
@@ -133,41 +174,6 @@ rule bb_stats:
         'gc={output.gc} '
         'gcformat=4 '
         'gchist={output.gc_hist} '
-
-##end reapr smalt bam depth
-
-rule samtools_depth_smalt:
-    input:
-        smalt_bam = 'output/reapr/smalt/smalt.bam'
-    output:
-        depth_out = 'output/samtools/smalt_depth.out'
-    log:
-        'output/logs/samtools_depth_smalt.log'
-    threads:
-        20
-    shell:
-        'samtools depth '
-        '{input.smalt_bam} '
-        '-o {output.depth_out} '
-        '-H '
-        '2> {log}'
-
-###try for reapr smalt bam output too
-
-rule calc_mean_depth:
-    input:  
-        depth = 'output/samtools/smalt_depth.out'
-    output:
-        mean_depth_table = 'output/samtools/smalt_mean_depth_table.csv'
-    singularity:
-        tidyverse_container
-    threads:
-        20
-    log:
-        'output/logs/calc_mean_depth.log'
-    script:
-        'src/calc_mean_depth.R'
-
 
 rule samtools_depth:
     input:
@@ -238,72 +244,6 @@ rule bwa_index:
         'bwa index '
         '{input.genome} '
         '-p {params.outdir} '
-        '2> {log} '
-
-##run reapr - does this give the same output as that in the LbFV genome paper?
-rule reapr_pipeline:
-    input:
-        mh_genome = 'data/Mh_assembly.fa',
-        bam = 'output/reapr/smalt/smalt.bam',
-        perfectmap = 'output/reapr/perfectmap/perfect.perfect_cov.gz'
-    output:
-        summary = 'output/reapr/pipeline/05.summary.report.txt'
-    params:
-        perfectmap_prefix = 'output/reapr/perfectmap/perfect',
-        outdir = 'output/reapr/pipeline'
-    threads:
-        50
-    log:
-        'output/logs/reapr/pipeline.log'
-    shell:
-        'bin/Reapr_1.0.18/reapr pipeline '
-        '{input.mh_genome} '
-        '{input.bam} '
-        '{params.outdir} '
-        '{params.perfectmap_prefix} '
-        '2> {log} '
-
-rule reapr_perfectmap:
-    input:
-        mh_genome = 'data/Mh_assembly.fa',
-        ##perfectmap needs full path for symlinks or fails & also needs all reads same length so not adapter/quality trimmed
-        filr1 = '/Volumes/userdata/student_users/sarahinwood/Projects/mh-projects/mh-genome/output/bbduk_trim_dna/mhyp_filr1.fq.gz',
-        filr2 = '/Volumes/userdata/student_users/sarahinwood/Projects/mh-projects/mh-genome/output/bbduk_trim_dna/mhyp_filr2.fq.gz'
-    output:
-        coverage_out = 'output/reapr/perfectmap/out.perfect_cov.gz'
-    params:
-        prefix = 'output/reapr/perfectmap/perfect'
-    threads:
-        50
-    log:
-        'output/logs/reapr/perfectmap.log'
-    shell:
-        'bin/Reapr_1.0.18/reapr perfectmap '
-        '{input.mh_genome} '
-        '{input.filr1} '
-        '{input.filr2} '
-        '101 '
-        '{params.prefix} '
-        '2> {log} '
-
-rule reapr_smalt:
-    input:
-        mh_genome = 'data/Mh_assembly.fa',
-        trimr1 = 'output/bbduk_trim_dna/mhyp_trimr1.fq',
-        trimr2 = 'output/bbduk_trim_dna/mhyp_trimr2.fq'
-    output:
-        bam = 'output/reapr/smalt/smalt.bam'
-    threads:
-        50
-    log:
-        'output/logs/reapr/smalt.log'
-    shell:
-        'bin/Reapr_1.0.18/reapr smaltmap '
-        '{input.mh_genome} '
-        '{input.trimr1} '
-        '{input.trimr2} '
-        '{output.bam} '
-        '-n {threads} '
         '2> {log} '
 
 ##temp gunzip for smalt
