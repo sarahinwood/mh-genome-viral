@@ -84,7 +84,94 @@ rule target:
         'output/bb_stats/gc.txt',
         'output/samtools/depth.out',
         'output/busco/run_mh_genome/full_table_mh_genome.tsv',
-        'output/prodigal_blastp/nr_blastp.outfmt6'
+        'output/prodigal_blastp/nr_blastp.outfmt6',
+        'output/interproscan/protein_translations_for_interpro.faa.tsv',
+        'output/blastdb/mh_genome.nhr',
+        'output/blastn_hi_c_genome/blastn_hi_c.outfmt6'
+
+##blastn prodigal gene predictions from viral scaffolds against new hyperodae hi-c genome to see where viral genes are
+rule blastn_prodigal_preds_mh_hic:
+    input:
+        prodigal_nt_preds = 'output/prodigal/nucleotide_seq.fasta'
+    output:
+        blastn_res = 'output/blastn_hi_c_genome/blastn_hi_c.outfmt6'
+    params:
+        hyperodae_hi_c_db = 'output/blastdb/mh_hi_c_genome' 
+    threads:
+        20
+    log:
+        'output/logs/blastn_hi_c_prodigal_preds.log'
+    shell:
+        'blastn '
+        '-query {input.prodigal_nt_preds} '
+        '-db {params.hyperodae_hi_c_db} '
+        '-num_threads {threads} '
+        '-evalue 1e-05 '
+        '-outfmt "6 std salltitles" > {output.blastn_res} '
+        '2>{log}'
+
+rule hyperodae__hi_c_blast_db:
+    input:
+        mh_genome = 'data/Mh_Hi-C_PGA_assembly.fasta'
+    output:
+        blast_db = 'output/blastdb/mh_hi_c_genome.nhr'
+    params:
+        db_name = 'mh_hi_c_genome',
+        db_dir = 'output/blastdb/mh_hi_c_genome'
+    threads:
+        20
+    log:
+        'output/logs/hyperodae_hi_c_blast_db.log'
+    shell:
+        'makeblastdb '
+        '-in {input.mh_genome} '
+        '-dbtype nucl '
+        '-title {params.db_name} '
+        '-out {params.db_dir} '
+        '-parse_seqids '
+        '2> {log}'
+
+rule hyperodae_blast_db:
+    input:
+        mh_genome = 'data/Mh_assembly.fa'
+    output:
+        blast_db = 'output/blastdb/mh_genome.nhr'
+    params:
+        db_name = 'mh_genome',
+        db_dir = 'output/blastdb/mh_genome'
+    threads:
+        20
+    log:
+        'output/logs/hyperodae_blast_db.log'
+    shell:
+        'makeblastdb '
+        '-in {input.mh_genome} '
+        '-dbtype nucl '
+        '-title {params.db_name} '
+        '-out {params.db_dir} '
+        '-parse_seqids '
+        '2> {log}'
+
+##interproscan for all peptides on viral scaffolds
+rule interproscan_viral_scaffold_peptides:
+	input:
+		viral_scaffold_peptides = 'output/prodigal/protein_translations_for_interpro.faa'
+	output:
+		interpro_tsv = 'output/interproscan/protein_translations_for_interpro.faa.tsv'
+	params:
+		outdir = 'output/interproscan'
+	threads:
+		20
+	log:
+		'output/logs/interproscan_viral_scaffold_peptides.log'
+	shell:
+		'bin/interproscan/interproscan.sh '
+		'--input {input.viral_scaffold_peptides} '
+		'--seqtype p '
+		'--output-dir {params.outdir} '
+		'--cpu {threads} '
+		'--goterms '
+		'2> {log}'
 
 rule blastp_nr_prodigal:
     input:

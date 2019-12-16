@@ -1,5 +1,6 @@
 library("data.table")
 library("dplyr")
+library("stats")
 library("rtracklayer")
 
 viral_scaffold_nr_blastp <- fread("output/prodigal_blastp/nr_blastp.outfmt6")
@@ -43,3 +44,19 @@ scaffold_to_geneid$peptide_id <- data.table(paste(scaffold_to_geneid$scaffold_id
 blast_gene_ids<- merge(blast_min_evalues, scaffold_to_geneid, by="peptide_id", all=TRUE)
 blast_gff <- merge(blast_gene_ids, gene_coords, by.x="gene_id", by.y="ID", all=TRUE)
 fwrite(blast_gff, "output/prodigal_blastp/blast_gff_coords.csv")
+
+no_annot <- blast_gff[is.na(annotation),]
+mean(as.numeric(no_annot$conf))
+annot <- blast_gff[!is.na(annotation),]
+mean(as.numeric(annot$conf))
+
+##make tables of annot and unannot and compare prodigal scores
+## viral vs non viral prodigal scores
+
+
+interproscan_gff <- readGFF("output/interproscan/protein_translations_for_interpro.faa.gff3")
+interproscan_tsv <- fread("output/interproscan/protein_translations_for_interpro.faa.tsv", fill=TRUE)
+setnames(interproscan_tsv, old=c("V1", "V2", "V3", "V4", "V5", "V6", "V7", "V8", "V9", "V10", "V11", "V12", "V13", "V14"),
+         new=c("protein_accession", "seq_MD5_digest", "seq_length", "analysis", "sig_accession", "sig_description", "start", "stop", "score", "status", "date", "interpro_annot_accession", "description", "GO_annot"))
+
+a <- reshape(interproscan_tsv, idvar="protein_accession", direction="wide", timevar="analysis")
