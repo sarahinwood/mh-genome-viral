@@ -87,7 +87,51 @@ rule target:
         'output/prodigal_blastp/nr_blastp.outfmt6',
         'output/interproscan/protein_translations_for_interpro.faa.tsv',
         'output/blastdb/mh_genome.nhr',
-        'output/blastn_hi_c_genome/blastn_hi_c.outfmt6'
+        'output/blastn_hi_c_genome/blastn_hi_c.outfmt6',
+        'output/blastdb/mh_transcriptome.nhr',
+        'output/blastn_transcriptome/blastn_transcriptome.outfmt6'
+
+##look for transcripts in transcriptome with hits to viral peptides
+rule blastn_prodigal_preds_mh_transcriptome:
+    input:
+        prodigal_nt_preds = 'output/prodigal/nucleotide_seq.fasta'
+    output:
+        blastn_res = 'output/blastn_transcriptome/blastn_transcriptome.outfmt6'
+    params:
+        hyperodae_transcriptome_db = 'output/blastdb/mh_transcriptome'
+    threads:
+        10
+    log:
+        'output/logs/blastn_transcriptome_prodigal_preds.log'
+    shell:
+        'blastn '
+        '-query {input.prodigal_nt_preds} '
+        '-db {params.hyperodae_transcriptome_db} '
+        '-num_threads {threads} '
+        '-evalue 1e-05 '
+        '-outfmt "6 std salltitles" > {output.blastn_res} '
+        '2>{log}'
+
+rule mh_transcriptome_blast_db:
+    input:
+        mh_transcriptome = 'data/mh_transcriptome/mh_transcriptome_length_filtered.fasta'
+    output:
+        blast_db = 'output/blastdb/mh_transcriptome.nhr'
+    params:
+        db_name = 'mh_transcriptome',
+        db_dir = 'output/blastdb/mh_transcriptome'
+    threads:
+        10
+    log:
+        'output/logs/hyperodae_transcriptome_blast_db.log'
+    shell:
+        'makeblastdb '
+        '-in {input.mh_transcriptome} '
+        '-dbtype nucl '
+        '-title {params.db_name} '
+        '-out {params.db_dir} '
+        '-parse_seqids '
+        '2> {log}'
 
 ##blastn prodigal gene predictions from viral scaffolds against new hyperodae hi-c genome to see where viral genes are
 rule blastn_prodigal_preds_mh_hic:
