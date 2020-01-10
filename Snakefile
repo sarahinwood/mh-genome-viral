@@ -91,6 +91,10 @@ rule target:
         'output/blastdb/mh_transcriptome.nhr',
         'output/blastn_transcriptome/blastn_transcriptome.outfmt6'
 
+####################################################
+##blast viral scaffold genes against transcriptome##
+####################################################
+
 ##look for transcripts in transcriptome with hits to viral peptides
 rule blastn_prodigal_preds_mh_transcriptome:
     input:
@@ -133,7 +137,10 @@ rule mh_transcriptome_blast_db:
         '-parse_seqids '
         '2> {log}'
 
-##blastn prodigal gene predictions from viral scaffolds against new hyperodae hi-c genome to see where viral genes are
+#############################################
+##blast viral scaffold genes vs hi-c genome##
+#############################################
+
 rule blastn_prodigal_preds_mh_hic:
     input:
         prodigal_nt_preds = 'output/prodigal/nucleotide_seq.fasta'
@@ -156,7 +163,7 @@ rule blastn_prodigal_preds_mh_hic:
 
 rule hyperodae__hi_c_blast_db:
     input:
-        mh_genome = 'data/Mh_Hi-C_PGA_assembly.fasta'
+        mh_genome = 'data/hi-c_genome/Mh_Hi-C_PGA_assembly.fasta'
     output:
         blast_db = 'output/blastdb/mh_hi_c_genome.nhr'
     params:
@@ -195,6 +202,12 @@ rule hyperodae_blast_db:
         '-out {params.db_dir} '
         '-parse_seqids '
         '2> {log}'
+
+#################################################
+##predict and annotate genes on viral scaffolds##
+#################################################
+
+##did i ever use interpro results?
 
 ##interproscan for all peptides on viral scaffolds
 rule interproscan_viral_scaffold_peptides:
@@ -258,6 +271,10 @@ rule prodigal:
         '-p meta '
         '-o {output.gene_predictions} '
         '2> {log} '
+
+###########################
+##GC and depth comparison##
+###########################
 
 ##run busco to be able to colour scaffolds on gc vs depth that contain busco genes
 rule busco:
@@ -451,7 +468,9 @@ rule bbduk_filter_dna:
         'stats={output.f_stats} '       
         '2> {log.filter} '         
 
-##########working with RNAseq reads from here down##########
+############################################
+##working with RNAseq reads from here down##
+############################################
 
 ##index so can view in igv
 rule index_star_bam:
