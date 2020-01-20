@@ -30,13 +30,14 @@ non_viral_GC <- subset(mh_gc, !(`#Name` %in% viral_scaffold_list$V1))
 mean_scaff_depths <- fread('output/samtools/mean_depth_table.csv')
 ##plot mean depths
 hist(mean_scaff_depths$mean_depth, breaks=1000, xlim = c(0,500))
+
 ##make table to depth vs GC
 depth_vs_gc <- merge(mean_scaff_depths, mh_gc, by.x="scaffold_id", by.y="#Name", all=TRUE)
 ##add column for suspected viral contig?
-depth_vs_gc$label <- ifelse(depth_vs_gc$scaffold_id %in% viral_scaffold_list$V1, 'viral',
-                            ifelse(depth_vs_gc$scaffold_id %in% prob_not_viral, 'probably not viral, clustered', 'non-viral'))
+depth_vs_gc$viral_status <- ifelse(depth_vs_gc$scaffold_id %in% viral_scaffold_list$V1, 'viral',
+                            ifelse(depth_vs_gc$scaffold_id %in% prob_not_viral, 'probably not viral', 'non-viral'))
 
-#viral scaffold depth
+#viral scaffold depth - plotting
 viral_depth_gc <- subset(depth_vs_gc, scaffold_id %in% viral_scaffold_list$V1)
 hist(viral_depth_gc$mean_depth, breaks=100, xlim = c(0,500))
 #non-viral scaffold depth
@@ -54,11 +55,11 @@ viral_minus_nudivirus <- subset(viral_depth_gc, !(scaffold_id %in% high_depth_nu
 busco <- fread("output/busco/run_mh_genome/full_table_mh_genome.tsv", header=TRUE, fill=TRUE, skip = 4)
 busco_scaffolds <- busco$Contig
 ##create column labelling whether contigs contain BUSCO gene
-depth_vs_gc$busco <- ifelse(depth_vs_gc$scaffold_id %in% busco_scaffolds, 'BUSCO', 'NA')
-depth_vs_gc$plot_label <- paste(depth_vs_gc$label,depth_vs_gc$busco)
+depth_vs_gc$busco <- ifelse(depth_vs_gc$scaffold_id %in% busco_scaffolds, 'BUSCO-containing', 'no BUSCO')
+depth_vs_gc$busco_plot_label <- paste(depth_vs_gc$viral_status,", ",depth_vs_gc$busco, sep="")
 
 ##playing around for different group means - not for plot
-b <- subset(depth_vs_gc, !label == "non-viral")
+b <- subset(depth_vs_gc, !viral_status == "non-viral")
 c <- subset(a, !(scaffold_id %in% high_depth_nudivirus))
 mean(c$mean_depth)
 mean(c$GC)
@@ -75,4 +76,5 @@ scaffold_to_cluster$cluster_id <- tstrsplit(scaffold_to_cluster$cluster_id, "\\)
 ##merge with depth vs gc table
 depth_vs_gc<- merge(depth_vs_gc, scaffold_to_cluster, by="scaffold_id", all.x=TRUE)
 depth_vs_gc$cluster_status <- ifelse(!is.na(depth_vs_gc$cluster_id), 'clustered', 'unclustered')
+depth_vs_gc$hic_plot_label <- paste(depth_vs_gc$viral_status,", ",depth_vs_gc$cluster_status, sep="")
 fwrite(depth_vs_gc, "output/depth_vs_gc/depth_vs_gc.csv")
