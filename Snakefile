@@ -305,6 +305,7 @@ rule busco:
         '-f '
         '&> {log} '
 
+##will calc GC content of each scaffold
 rule bb_stats:
     input:
         genome = 'data/Mh_assembly.fa'
@@ -322,6 +323,21 @@ rule bb_stats:
         'gc={output.gc} '
         'gcformat=4 '
         'gchist={output.gc_hist} '
+
+##calc read depth across scaffolds
+rule calc_mean_depth:
+     input:  
+         depth = 'output/samtools/depth.out'
+     output:
+         mean_depth_table = 'output/samtools/mean_depth_table.csv'
+     singularity:
+         tidyverse_container
+     threads:
+         20
+     log:
+         'output/logs/calc_mean_depth.log'
+     script:
+         'src/calc_mean_depth.R'
 
 rule samtools_depth:
     input:
@@ -354,6 +370,7 @@ rule samtools_sort:
         '-o {output.sorted_bam} '
         '2> {log}'
 
+##bwa-mem to map for read depth of scaffolds
 rule bwa_mem:
     input:
         index = 'output/bwa/index/index.bwt',
@@ -376,7 +393,6 @@ rule bwa_mem:
         '> {output.sam} '
         '2> {log}'
 
-##bwa-mem for coverage of scaffolds - compare to reapr smalt?
 rule bwa_index:
     input:
         genome = 'data/Mh_assembly.fa'
@@ -393,21 +409,6 @@ rule bwa_index:
         '{input.genome} '
         '-p {params.outdir} '
         '2> {log} '
-
-##temp gunzip for smalt
-rule unzip_bbduk:
-    input:
-        trimr1 = 'output/bbduk_trim_dna/mhyp_trimr1.fq.gz',
-        trimr2 = 'output/bbduk_trim_dna/mhyp_trimr2.fq.gz'
-    output:
-        unzipr1 = temp('output/bbduk_trim_dna/uz_mhyp_trimr1.fq'),
-        unzipr2 = temp('output/bbduk_trim_dna/uz_mhyp_trimr2.fq')
-    threads:
-        10
-    shell:
-        'gunzip {input.trimr1} > {output.unzipr1} & '
-        'gunzip {input.trimr2} > {output.unzipr2} & '
-        'wait '
 
 ##trim and decontaminate DNA reads to map onto genome
 rule bbduk_trim_dna:
