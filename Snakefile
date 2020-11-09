@@ -64,6 +64,7 @@ bbduk_container = 'shub://TomHarrop/singularity-containers:bbmap_38.00'
 star_container = 'shub://TomHarrop/singularity-containers:star_2.7.0c'
 tidyverse_container = 'shub://TomHarrop/singularity-containers:r_3.5.0'
 busco_container = 'shub://TomHarrop/singularity-containers:busco_3.0.2'
+samtools_container = 'shub://TomHarrop/singularity-containers:samtools_1.9'
 
 #########
 # SETUP #
@@ -79,17 +80,23 @@ all_samples = sorted(set(sample_key['Sample_name']))
 
 rule target:
     input:
-    	##do rnaseq reads map onto viral scaffolds & if so do they map over introns?
+        ##do rnaseq reads map onto viral scaffolds & if so do they map over introns?
         expand('output/star/star_pass2/{sample}.Aligned.sortedByCoord.out.bam.bai', sample=all_samples),
         'output/bb_stats/gc.txt',
-        'output/samtools/depth.out',
+        'output/samtools/sorted.bam.bai',
+        'output/samtools_depth/depth.out',
         'output/busco/run_mh_genome/full_table_mh_genome.tsv',
         'output/prodigal_blastp/nr_blastp.outfmt6',
-        'output/interproscan/protein_translations_for_interpro.faa.tsv',
+        #'output/interproscan/protein_translations_for_interpro.faa.tsv', - not working - look into
         'output/blastdb/mh_genome.nhr',
         'output/blastn_hi_c_genome/blastn_hi_c.outfmt6',
         'output/blastdb/mh_transcriptome.nhr',
-        'output/blastn_transcriptome/blastn_transcriptome.outfmt6'
+        'output/blastn_transcriptome/blastn_transcriptome.outfmt6',
+        'output/samtools_depth/mean_depth_table.csv',
+        'output/samtools_depth/boxplot_no_outliers.pdf',
+        'output/samtools_depth/depth_boxplot.pdf',
+        'output/samtools_depth/viral_hic_depth_ttest.txt'
+
 
 ####################################################
 ##blast viral scaffold genes against transcriptome##
@@ -211,24 +218,24 @@ rule hyperodae_blast_db:
 
 ##interproscan for all peptides on viral scaffolds
 rule interproscan_viral_scaffold_peptides:
-	input:
-		viral_scaffold_peptides = 'output/prodigal/protein_translations_for_interpro.faa'
-	output:
-		interpro_tsv = 'output/interproscan/protein_translations_for_interpro.faa.tsv'
-	params:
-		outdir = 'output/interproscan'
-	threads:
-		20
-	log:
-		'output/logs/interproscan_viral_scaffold_peptides.log'
-	shell:
-		'bin/interproscan/interproscan.sh '
-		'--input {input.viral_scaffold_peptides} '
-		'--seqtype p '
-		'--output-dir {params.outdir} '
-		'--cpu {threads} '
-		'--goterms '
-		'2> {log}'
+    input:
+        viral_scaffold_peptides = 'output/prodigal/protein_translations_for_interpro.faa'
+    output:
+        interpro_tsv = 'output/interproscan/protein_translations_for_interpro.faa.tsv'
+    params:
+        outdir = 'output/interproscan'
+    threads:
+        20
+    log:
+        'output/logs/interproscan_viral_scaffold_peptides.log'
+    shell:
+        'bin/interproscan/interproscan.sh '
+        '--input {input.viral_scaffold_peptides} '
+        '--seqtype p '
+        '--output-dir {params.outdir} '
+        '--cpu {threads} '
+        '--goterms '
+        '2> {log}'
 
 rule blastp_nr_prodigal:
     input:
@@ -324,12 +331,26 @@ rule bb_stats:
         'gcformat=4 '
         'gchist={output.gc_hist} '
 
+rule depth_t_test:
+    input:
+        st_depth_file = 'output/samtools_depth/filtered_depth.out',
+        scaffold_id_table = 'data/scaffold_id_table.csv'
+    output:
+        ttest_results = 'output/samtools_depth/viral_hic_depth_ttest.txt'
+    singularity:
+        tidyverse_container
+    log:
+        'output/logs/depth_ttest.log'
+    script:
+        'src/depth_ttest.R'
+
+
 ##calc read depth across scaffolds
 rule calc_mean_depth:
      input:  
-         depth = 'output/samtools/depth.out'
+         depth = 'output/samtools_depth/depth.out'
      output:
-         mean_depth_table = 'output/samtools/mean_depth_table.csv'
+         mean_depth_table = 'output/samtools_depth/mean_depth_table.csv'
      singularity:
          tidyverse_container
      threads:
@@ -339,20 +360,62 @@ rule calc_mean_depth:
      script:
          'src/calc_mean_depth.R'
 
+rule depth_boxplot:
+    input:
+        st_depth_file = 'output/samtools_depth/filtered_depth.out',
+        scaffold_id_table = 'data/scaffold_id_table.csv'
+    output:
+        boxplot = 'output/samtools_depth/depth_boxplot.pdf',
+        boxplot_no_outliers = 'output/samtools_depth/boxplot_no_outliers.pdf'
+    singularity:
+        tidyverse_container
+    log:
+        'output/logs/depth_boxplot.log'
+    script:
+        'src/depth_boxplot.R'
+
+rule filter_depth_file:
+    input:
+        depth_out = 'output/samtools_depth/depth.out',
+        viral_hic_ids_list = 'output/viral_and_hic_scaffold_ids.txt'
+    output:
+        filtered_depth = 'output/samtools_depth/filtered_depth.out'
+    shell:
+        'egrep -wf {input.viral_hic_ids_list} {input.depth_out} > {output.filtered_depth}'
+
+##include -a option - to print all positions even if depth = 0
 rule samtools_depth:
     input:
         sorted_bam = 'output/samtools/sorted.bam'
     output:
-        depth_out = 'output/samtools/depth.out'
+        depth_out = 'output/samtools_depth/depth.out'
     log:
         'output/logs/samtools_depth.log'
     threads:
         20
+    singularity:
+        samtools_container
     shell:
         'samtools depth '
         '{input.sorted_bam} '
-        '-o {output.depth_out} '
-        '-H '
+        '> {output.depth_out} '
+        '-a '
+        '2> {log}'
+
+rule samtools_index:
+    input:
+        sam = 'output/samtools/sorted.bam'
+    output:
+        index = 'output/samtools/sorted.bam.bai'
+    log:
+        'output/logs/samtools_index.log'
+    threads:
+        20
+    singularity:
+        samtools_container
+    shell:
+        'samtools index '
+        '{input.sam} '
         '2> {log}'
 
 rule samtools_sort:
@@ -364,6 +427,8 @@ rule samtools_sort:
         'output/logs/samtools_sort.log'
     threads:
         20
+    singularity:
+        samtools_container
     shell:
         'samtools sort '
         '{input.sam} '
@@ -395,7 +460,7 @@ rule bwa_mem:
 
 rule bwa_index:
     input:
-        genome = 'data/Mh_assembly.fa'
+        genome = 'data/hi-c_genome/Mh_Hi-C_PGA_assembly.fasta'
     output:
         index = 'output/bwa/index/index.bwt'
     params:
@@ -475,18 +540,20 @@ rule bbduk_filter_dna:
 
 ##index so can view in igv
 rule index_star_bam:
-	input:
-		bam = 'output/star/star_pass2/{sample}.Aligned.sortedByCoord.out.bam'
-	output:
-		bai = 'output/star/star_pass2/{sample}.Aligned.sortedByCoord.out.bam.bai'
-	threads:
-		20
-	log:
-		'output/logs/{sample}_index.log'
-	shell:
-		'samtools '
-		'index '
-		'{input.bam} '
+    input:
+        bam = 'output/star/star_pass2/{sample}.Aligned.sortedByCoord.out.bam'
+    output:
+        bai = 'output/star/star_pass2/{sample}.Aligned.sortedByCoord.out.bam.bai'
+    threads:
+        20
+    singularity:
+        samtools_container
+    log:
+        'output/logs/{sample}_index.log'
+    shell:
+        'samtools '
+        'index '
+        '{input.bam} '
 
 ###map RNAseq onto genome & see whether viral genes are expressed, in what tissues & whether reads map over introns?
 rule star_second_pass:

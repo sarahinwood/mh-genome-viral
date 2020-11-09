@@ -25,7 +25,6 @@ non_viral_GC <- subset(mh_gc, !(`#Name` %in% viral_scaffold_list$V1))
 ################
 #### Depth #####
 ################
-
 ##read in mean scaffold depths for scaffolds from snakemake script
 mean_scaff_depths <- fread('output/samtools/mean_depth_table.csv')
 ##plot mean depths
