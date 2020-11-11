@@ -1,3 +1,0 @@
-# mh-genome
-
-![](dag.svg)
