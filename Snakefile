@@ -50,7 +50,7 @@ def sample_name_to_fastq(wildcards):
 star_reference_folder = 'output/star/star_reference'
 
 read_dir = 'data/reads'
-sample_key_file = 'data/rnaseq_sample_key.csv'
+sample_key_file = 'data/reads/rnaseq_sample_key.csv'
 sample_key = pandas.read_csv(sample_key_file)
 
 bbduk_adapters = '/adapters.fa'
@@ -80,32 +80,27 @@ all_samples = sorted(set(sample_key['Sample_name']))
 
 rule target:
     input:
-        ##do rnaseq reads map onto viral scaffolds & if so do they map over introns?
         expand('output/star/star_pass2/{sample}.Aligned.sortedByCoord.out.bam.bai', sample=all_samples),
         'output/bb_stats/gc.txt',
         'output/samtools/sorted.bam.bai',
-        'output/samtools_depth/depth.out',
         'output/busco/run_mh_genome/full_table_mh_genome.tsv',
         'output/prodigal_blastp/nr_blastp.outfmt6',
-        #'output/interproscan/protein_translations_for_interpro.faa.tsv', - not working - look into
-        'output/blastdb/mh_genome.nhr',
-        'output/blastn_hi_c_genome/blastn_hi_c.outfmt6',
-        'output/blastdb/mh_transcriptome.nhr',
         'output/blastn_transcriptome/blastn_transcriptome.outfmt6',
         'output/samtools_depth/mean_depth_table.csv',
         'output/samtools_depth/boxplot_no_outliers.pdf',
         'output/samtools_depth/depth_boxplot.pdf',
-        'output/samtools_depth/viral_hic_depth_ttest.txt'
+        'output/samtools_depth/viral_hic_depth_ttest.txt',
+        #'output/interproscan/protein_translations_for_interpro.faa.tsv', - not working - look into
 
-
-####################################################
-##blast viral scaffold genes against transcriptome##
-####################################################
+######################################################
+## Blast viral scaffold genes against transcriptome ##
+######################################################
 
 ##look for transcripts in transcriptome with hits to viral peptides
 rule blastn_prodigal_preds_mh_transcriptome:
     input:
-        prodigal_nt_preds = 'output/prodigal/nucleotide_seq.fasta'
+        prodigal_nt_preds = 'output/prodigal/nucleotide_seq.fasta',
+        blast_db = 'output/blastdb/mh_genome.nhr'
     output:
         blastn_res = 'output/blastn_transcriptome/blastn_transcriptome.outfmt6'
     params:
@@ -125,7 +120,8 @@ rule blastn_prodigal_preds_mh_transcriptome:
 
 rule mh_transcriptome_blast_db:
     input:
-        mh_transcriptome = 'data/mh_transcriptome/mh_transcriptome_length_filtered.fasta'
+        mh_transcriptome = 'data/mh_transcriptome/mh_transcriptome_length_filtered.fasta',
+        blast_db = 'output/blastdb/mh_genome.nhr'
     output:
         blast_db = 'output/blastdb/mh_transcriptome.nhr'
     params:
@@ -144,52 +140,7 @@ rule mh_transcriptome_blast_db:
         '-parse_seqids '
         '2> {log}'
 
-#############################################
-##blast viral scaffold genes vs hi-c genome##
-#############################################
-
-rule blastn_prodigal_preds_mh_hic:
-    input:
-        prodigal_nt_preds = 'output/prodigal/nucleotide_seq.fasta'
-    output:
-        blastn_res = 'output/blastn_hi_c_genome/blastn_hi_c.outfmt6'
-    params:
-        hyperodae_hi_c_db = 'output/blastdb/mh_hi_c_genome' 
-    threads:
-        20
-    log:
-        'output/logs/blastn_hi_c_prodigal_preds.log'
-    shell:
-        'blastn '
-        '-query {input.prodigal_nt_preds} '
-        '-db {params.hyperodae_hi_c_db} '
-        '-num_threads {threads} '
-        '-evalue 1e-05 '
-        '-outfmt "6 std salltitles" > {output.blastn_res} '
-        '2>{log}'
-
-rule hyperodae__hi_c_blast_db:
-    input:
-        mh_genome = 'data/hi-c_genome/Mh_Hi-C_PGA_assembly.fasta'
-    output:
-        blast_db = 'output/blastdb/mh_hi_c_genome.nhr'
-    params:
-        db_name = 'mh_hi_c_genome',
-        db_dir = 'output/blastdb/mh_hi_c_genome'
-    threads:
-        20
-    log:
-        'output/logs/hyperodae_hi_c_blast_db.log'
-    shell:
-        'makeblastdb '
-        '-in {input.mh_genome} '
-        '-dbtype nucl '
-        '-title {params.db_name} '
-        '-out {params.db_dir} '
-        '-parse_seqids '
-        '2> {log}'
-
-rule hyperodae_blast_db:
+rule hyperodae_transcriptome_blast_db:
     input:
         mh_genome = 'data/Mh_assembly.fa'
     output:
@@ -210,12 +161,11 @@ rule hyperodae_blast_db:
         '-parse_seqids '
         '2> {log}'
 
-#################################################
-##predict and annotate genes on viral scaffolds##
-#################################################
+###################################################
+## predict and annotate genes on viral scaffolds ##
+###################################################
 
 ##did i ever use interpro results?
-
 ##interproscan for all peptides on viral scaffolds
 rule interproscan_viral_scaffold_peptides:
     input:
@@ -260,13 +210,13 @@ rule blastp_nr_prodigal:
 ##re-predict viral genes using bacterial translation code
 rule prodigal:
     input:
-        viral_scaffolds = 'data/viral_scaffolds.fasta'
+        viral_scaffolds = 'data/hi-c_genome/hic_viral_scaffolds.fasta'
     output:
         protein_translations = 'output/prodigal/protein_translations.faa',
         nucleotide_seq = 'output/prodigal/nucleotide_seq.fasta',
         gene_predictions = 'output/prodigal/gene_predictions.gff'
     log:
-        'output/logs/prodigal.log'
+        'output/logs/hic_prodigal.log'
     threads:
         1
     shell:
@@ -279,9 +229,9 @@ rule prodigal:
         '-o {output.gene_predictions} '
         '2> {log} '
 
-###########################
-##GC and depth comparison##
-###########################
+##################################
+## GC/BUSCO vs depth comparison ##
+##################################
 
 ##run busco to be able to colour scaffolds on gc vs depth that contain busco genes
 rule busco:
@@ -331,20 +281,6 @@ rule bb_stats:
         'gcformat=4 '
         'gchist={output.gc_hist} '
 
-rule depth_t_test:
-    input:
-        st_depth_file = 'output/samtools_depth/filtered_depth.out',
-        scaffold_id_table = 'data/scaffold_id_table.csv'
-    output:
-        ttest_results = 'output/samtools_depth/viral_hic_depth_ttest.txt'
-    singularity:
-        tidyverse_container
-    log:
-        'output/logs/depth_ttest.log'
-    script:
-        'src/depth_ttest.R'
-
-
 ##calc read depth across scaffolds
 rule calc_mean_depth:
      input:  
@@ -360,6 +296,23 @@ rule calc_mean_depth:
      script:
          'src/calc_mean_depth.R'
 
+############################
+## Depth Boxplot & T-Test ##
+############################
+
+rule depth_t_test:
+    input:
+        st_depth_file = 'output/samtools_depth/filtered_depth.out',
+        scaffold_id_table = 'data/scaffold_id_table.csv'
+    output:
+        ttest_results = 'output/samtools_depth/viral_hic_depth_ttest.txt'
+    singularity:
+        tidyverse_container
+    log:
+        'output/logs/depth_ttest.log'
+    script:
+        'src/depth_ttest.R'
+
 rule depth_boxplot:
     input:
         st_depth_file = 'output/samtools_depth/filtered_depth.out',
@@ -374,14 +327,20 @@ rule depth_boxplot:
     script:
         'src/depth_boxplot.R'
 
+##filter depth file for viral and hi-c scaffolds/contigs to reduce filesize going into boxplot
+##this rule doesn't show in graph?
 rule filter_depth_file:
     input:
         depth_out = 'output/samtools_depth/depth.out',
-        viral_hic_ids_list = 'output/viral_and_hic_scaffold_ids.txt'
+        viral_hic_ids_list = 'data/viral_and_hic_scaffold_ids.txt'
     output:
         filtered_depth = 'output/samtools_depth/filtered_depth.out'
     shell:
         'egrep -wf {input.viral_hic_ids_list} {input.depth_out} > {output.filtered_depth}'
+
+##########################################
+## map original genome sequencing reads ##
+##########################################
 
 ##include -a option - to print all positions even if depth = 0
 rule samtools_depth:
@@ -534,9 +493,9 @@ rule bbduk_filter_dna:
         'stats={output.f_stats} '       
         '2> {log.filter} '         
 
-############################################
-##working with RNAseq reads from here down##
-############################################
+##########################
+## mapping RNAseq reads ##
+##########################
 
 ##index so can view in igv
 rule index_star_bam:
@@ -613,7 +572,7 @@ rule star_first_pass:
 
 rule star_reference:
     input:
-        mh_genome = 'data/Mh_assembly.fa'
+        mh_genome = 'data/hi-c_genome/Mh_Hi-C_PGA_assembly.fasta'
     output:
         'output/star/star_reference/Genome'
     params:
