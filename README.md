@@ -1,3 +1,3 @@
 # mh-genome
 
-![](dag.pdf)
+![](dag.svg)
