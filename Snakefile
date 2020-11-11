@@ -328,7 +328,6 @@ rule depth_boxplot:
         'src/depth_boxplot.R'
 
 ##filter depth file for viral and hi-c scaffolds/contigs to reduce filesize going into boxplot
-##this rule doesn't show in graph?
 rule filter_depth_file:
     input:
         depth_out = 'output/samtools_depth/depth.out',

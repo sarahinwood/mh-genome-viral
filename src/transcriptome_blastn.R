@@ -27,18 +27,9 @@ fwrite(viral_table_transcripts, "output/blastn_transcriptome/transcripts_annots.
 
 ##add back to big viral gene table
 prodigal_id_vs_transcriptome <- transcriptome_blastn[,c(1,2,11)]
-merge(prodigal_id_vs_transcriptome, )
-prodigal_blast_table <- fread("output/blastn_hi_c_genome/HiC_vs_oldassembly_viral_genes.csv")
+prodigal_blast_table <- fread("output/prodigal_blastp/blast_gff_coords.csv")
 prodigal_blast_table_transcript_ids <- merge(prodigal_blast_table, viral_gene_table, by="prodigal_nt_id", all.x=TRUE)
 fwrite(prodigal_blast_table_transcript_ids, "output/blastn_transcriptome/viral_genes_vs_hicgenome_transcriptome.csv")
 fwrite(prodigal_blast_table_transcript_ids, "output/viral_gene_table.csv")
-
-###????
-a <- dplyr::filter(viral_gene_table, grepl('PGA', nr_db_id.x))
-length(unique(a$transcript_id))
-b <- dplyr::filter(viral_gene_table, grepl('unscaffolded', nr_db_id.x))
-length(unique(b$transcript_id))
-c <- data.table(b[,c(21)])
-length(unique(c$V1))
 
 
