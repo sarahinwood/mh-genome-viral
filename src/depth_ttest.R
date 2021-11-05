@@ -29,3 +29,18 @@ st_depth_boxpl <- merge(st_depth, scaffold_table, by="Scaffold_full_id", all.x=T
 test_res <- t.test(depth ~ test_label, data=st_depth_boxpl)
 chars <- capture.output(print(test_res))
 writeLines(chars, con=file(snakemake@output[["ttest_results"]]))
+
+##histogram of depths
+viral_contigs <- st_depth_boxpl[st_depth_boxpl$test_label=="Viral"]
+pdf(snakemake@output[["viral_depth_hist"]])
+viral_contigs[,hist(depth, breaks=1000, xlim=c(0,400))]
+dev.off()
+
+hic_scaffolds <- st_depth_boxpl[st_depth_boxpl$test_label=="Hi-C"]
+pdf(snakemake@output[["hic_depth_hist"]])
+hic_scaffolds[,hist(depth, breaks=1000, xlim=c(0,400))]
+dev.off()
+
+wilcox <- wilcox.test(depth ~ test_label, data=st_depth_boxpl)
+wilcox_chars <- capture.output(print(wilcox))
+writeLines(wilcox_chars, con=file(snakemake@output[["wilcox_res"]]))
